@@ -6,6 +6,16 @@ export default function CartScreen({ route, navigation }) {
   const [cartItems, setCartItems] = useState([]);
   const userId = 'guest-user'; // static or use auth
 
+  // Fetch cart items from the database when the screen is loaded
+  useEffect(() => {
+    axios.get(`http://10.6.8.123:5000/api/cart/${userId}`)
+      .then(res => {
+        setCartItems(res.data.items || []);
+      })
+      .catch(err => console.log(err));
+  }, []);
+
+  // Update the cart when a new item is added
   useEffect(() => {
     if (route.params?.product) {
       const newItem = { ...route.params.product, quantity: 1 };
@@ -40,16 +50,56 @@ export default function CartScreen({ route, navigation }) {
     navigation.navigate('Checkout', { cartItems });
   };
 
+  const updateItemQuantity = (itemId, newQuantity) => {
+    setCartItems(prevItems => {
+      return prevItems.map(item =>
+        item._id === itemId ? { ...item, quantity: newQuantity } : item
+      );
+    });
+
+    // Update the quantity in the database
+    axios.post('http://10.6.8.123:5000/api/cart/update', {
+      userId,
+      items: cartItems.filter(item => item._id === itemId)
+    }).catch(err => console.log(err));
+  };
+
+  const removeItem = (itemId) => {
+    setCartItems(prevItems => prevItems.filter(item => item._id !== itemId));
+
+    // Remove from MongoDB
+    axios.post('http://10.6.8.123:5000/api/cart/remove', {
+      userId,
+      productId: itemId
+    }).catch(err => console.log(err));
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Your Cart</Text>
       <FlatList
         data={cartItems}
-        keyExtractor={(item, index) => index.toString()}
+        keyExtractor={(item) => item._id}
         renderItem={({ item }) => (
           <View style={styles.itemBox}>
             <Text style={styles.itemName}>{item.name}</Text>
             <Text style={styles.itemDetails}>${item.price} x {item.quantity}</Text>
+            <View style={styles.quantityControls}>
+              <Button
+                title="-"
+                onPress={() => updateItemQuantity(item._id, item.quantity - 1)}
+                disabled={item.quantity <= 1}
+              />
+              <Button
+                title="+"
+                onPress={() => updateItemQuantity(item._id, item.quantity + 1)}
+              />
+              <Button
+                title="Remove"
+                onPress={() => removeItem(item._id)}
+                color="#dc3545"
+              />
+            </View>
           </View>
         )}
       />
@@ -100,5 +150,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#888',
     marginTop: 30,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
   },
 });
